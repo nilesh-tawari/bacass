@@ -29,6 +29,7 @@ def helpMessage() {
       --assembly_type               Default: "Short", Available: "Short", "Long", "Hybrid".
       --kraken2db                   Path to Kraken2 Database directory
       --prokka_args                 Advanced: Extra arguments to Prokka (quote and add leading space)
+      --centrifugedb                Path to Centrifuge Database directory
       --unicycler_args              Advanced: Extra arguments to Unicycler (quote and add leading space)
       --canu_args                   Advanced: Extra arguments for Canu assembly (quote and add leading space)
 
@@ -109,12 +110,16 @@ if(!params.input){
            def lr = returnFile("${col.LongFastQ}")
            def f5 = returnFile("${col.Fast5}")
            def genome_size = "${col.GenomeSize}"
-           tuple(id,r1,r2,lr,f5,genome_size)
+           def locustag = "${col.Locustag}"
+           def genus = "${col.Genus}"
+           def species = "${col.Species}"
+           def strain = "${col.Strain}"
+           tuple(id,r1,r2,lr,f5,genome_size,locustag,genus,species,strain)
     }
     .dump(tag: "input")
-    .tap {ch_all_data; ch_all_data_for_fast5; ch_all_data_for_genomesize}
-    .map { id,r1,r2,lr,f5,gs -> 
-    tuple(id,r1,r2) 
+    .tap {ch_all_data; ch_all_data_for_fast5; ch_all_data_for_genomesize; ch_all_data_for_prokka}
+    .map { id,r1,r2,lr,f5,gs,locustag,genus,species,strain -> 
+    tuple(id,r1,r2)
     }
     .filter{ id,r1,r2 -> 
     r1 != 'NA' && r2 != 'NA'}
@@ -122,7 +127,7 @@ if(!params.input){
     .into {ch_for_short_trim; ch_for_fastqc}
     //Dump long read info to different channel! 
     ch_all_data
-    .map { id, r1, r2, lr, f5, genomeSize -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
             tuple(id, file(lr))
     }
     .dump(tag: 'longinput')
@@ -130,7 +135,7 @@ if(!params.input){
 
     //Dump fast5 to separate channel
     ch_all_data_for_fast5
-    .map { id, r1, r2, lr, f5, genomeSize -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
             tuple(id, f5)
     }
     .filter {id, fast5 -> 
@@ -140,13 +145,24 @@ if(!params.input){
 
     //Dump genomeSize to separate channel, too
     ch_all_data_for_genomesize
-    .map { id, r1, r2, lr, f5, genomeSize -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
     tuple(id,genomeSize)
     }
     .filter{id, genomeSize -> 
       genomeSize != 'NA'
     }
     .set {ch_genomeSize_forCanu}
+ 
+   //Dump prokka params in to prokka 
+    ch_all_data_for_prokka
+    .map {id,r1, r2, lr, f5, genomeSize, locustag,genus,species,strain ->
+     tuple(id, locustag,genus,species,strain)
+   }.filter{id, locustag,genus,species,strain ->
+      locustag != 'NA'
+      genus != 'NA'
+      species != 'NA'
+      strain != 'NA'
+    }.set{ch_params_forProkka}
 }
 
 // Header log info
@@ -380,7 +396,7 @@ process unicycler {
     set sample_id, file(fq1), file(fq2), file(lrfastq) from ch_short_long_joint_unicycler 
 
     output:
-    set sample_id, file("${sample_id}_assembly.fasta") into (quast_ch, prokka_ch, dfast_ch)
+    set sample_id, file("${sample_id}_assembly.fasta") into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
     set sample_id, file("${sample_id}_assembly.gfa") into bandage_ch
     file("${sample_id}_assembly.fasta") into (ch_assembly_nanopolish_unicycler,ch_assembly_medaka_unicycler)
     file("${sample_id}_assembly.gfa")
@@ -528,7 +544,7 @@ process kraken2_long {
  */
 process quast {
   tag {"$sample_id"}
-  publishDir "${params.outdir}/${sample_id}/QUAST", mode: 'copy'
+  publishDir "${params.outdir}/${sample_id}", mode: 'copy'
   
   input:
   set sample_id, file(fasta) from quast_ch
@@ -536,14 +552,14 @@ process quast {
   output:
   // multiqc only detects a file called report.tsv. to avoid
   // name clash with other samples we need a directory named by sample
-  file("${sample_id}_assembly_QC/")
-  file("${sample_id}_assembly_QC/report.tsv") into quast_logs_ch
+  // file("${sample_id}_assembly_QC/")
+  file("${sample_id}_assembly_QC/") into quast_logs_ch
   file("v_quast.txt") into ch_quast_version
 
   script:
   """
-  quast -t ${task.cpus} -o ${sample_id}_assembly_QC ${fasta}
-  quast -v > v_quast.txt
+  ~/bin/quast.py -t ${task.cpus} -o ${sample_id}_assembly_QC ${fasta}
+  ~/bin/quast.py -v > v_quast.txt
   """
 }
 
@@ -551,16 +567,16 @@ process quast {
  * Annotation with prokka
  */
 process prokka {
-   label 'large'
+   label 'small'
    tag "$sample_id"
    publishDir "${params.outdir}/${sample_id}/", mode: 'copy'
    
    input:
-   set sample_id, file(fasta) from prokka_ch
+   set sample_id, file(fasta), val(locustag), val(genus), val(species), val(strain) from prokka_ch.join(ch_params_forProkka)
 
    output:
-   file("${sample_id}_annotation/")
-   // multiqc prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
+   file("${sample_id}_annotation/")into prokka_logs_ch   
+   // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
    // also, this only makes sense if we could set genus/species/strain. otherwise all samples
    // are the same
    // file("${sample_id}_annotation/*txt") into prokka_logs_ch
@@ -569,10 +585,27 @@ process prokka {
 
    script:
    """
-   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} ${fasta}
+   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} --locustag "${locustag}" --genus "${genus}" --species "${species}" --strain "${strain}" ${fasta}
    """
 }
 
+process centrifuge {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/centrifuge", mode: 'copy'
+
+   input:
+   set sample_id, file(fasta) from centrifuge_ch
+
+   output:
+   file("${sample_id}_centrifuge_read_report.tsv")
+   file("${sample_id}_centrifuge_report.tsv")
+
+   script:
+   """
+   ~/bin/centrifuge -f -x ${params.centrifugedb} -U ${fasta} -S ${sample_id}_centrifuge_read_report.tsv --report-file ${sample_id}_centrifuge_report.tsv
+   """
+}
 process dfast {
    tag "$sample_id"
    publishDir "${params.outdir}/${sample_id}/", mode: 'copy'
@@ -649,6 +682,7 @@ process medaka {
  * Parse software version numbers
  */
 process get_software_versions {
+    
     publishDir "${params.outdir}/pipeline_info", mode: 'copy',
     saveAs: {filename ->
         if (filename.indexOf(".csv") > 0) filename
@@ -657,8 +691,8 @@ process get_software_versions {
 
     input:
     file quast_version from ch_quast_version
-    file porechop_version from ch_porechop_version
-    file dfast_version from ch_dfast_version_for_multiqc
+    //file porechop_version from ch_porechop_version
+    //file dfast_version from ch_dfast_version_for_multiqc
 
 
     output:
@@ -695,19 +729,19 @@ process multiqc {
     publishDir "${params.outdir}/MultiQC", mode: 'copy'
 
     input:
-    file multiqc_config from ch_multiqc_config
-    //file prokka_logs from prokka_logs_ch.collect().ifEmpty([])
-    file ('quast_logs/*') from quast_logs_ch.collect().ifEmpty([])
+    file multiqc_config from ch_multiqc_config.collect().ifEmpty([])
+    file prokka_logs from prokka_logs_ch.collect().ifEmpty([])
+    file quast_logs from quast_logs_ch.collect()
     // NOTE unicycler and kraken not supported
-    file ('fastqc/*') from ch_fastqc_results.collect().ifEmpty([])
-    file ('software_versions/*') from software_versions_yaml.collect()
+    file ('fastqc/*') from ch_fastqc_results.collect()
+    //file 'software_versions_mqc.yaml' from software_versions_yaml.collect()
     file workflow_summary from create_workflow_summary(summary)
 
     output:
     file "*multiqc_report.html" into multiqc_report
     file "*_data"
     file "multiqc_plots"
-
+    
     script:
     rtitle = custom_runName ? "--title \"$custom_runName\"" : ''
     rfilename = custom_runName ? "--filename " + custom_runName.replaceAll('\\W','_').replaceAll('_+','_') + "_multiqc_report" : ''
