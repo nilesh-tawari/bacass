@@ -43,6 +43,7 @@ def helpMessage() {
       --skip_kraken2                Skips the read classification with Kraken2
       --skip_polish                 Skips polishing long-reads with Nanopolish or Medaka
       --skip_pycoqc                 Skips long-read raw signal QC
+      --skip_assembly		    Skips trim_and_combine, fastqc and unicycler assembly
 
     AWSBatch options:
       --awsqueue                    The AWSBatch JobQueue that needs to be set when running on AWSBatch
@@ -114,11 +115,12 @@ if(!params.input){
            def genus = "${col.Genus}"
            def species = "${col.Species}"
            def strain = "${col.Strain}"
-           tuple(id,r1,r2,lr,f5,genome_size,locustag,genus,species,strain)
+	   def assembly = returnFile("${col.Assembly}")
+           tuple(id,r1,r2,lr,f5,genome_size,locustag,genus,species,strain,assembly)
     }
     .dump(tag: "input")
-    .tap {ch_all_data; ch_all_data_for_fast5; ch_all_data_for_genomesize; ch_all_data_for_prokka}
-    .map { id,r1,r2,lr,f5,gs,locustag,genus,species,strain -> 
+    .tap {ch_all_data; ch_all_data_for_fast5; ch_all_data_for_genomesize; ch_all_data_for_prokka; ch_all_data_for_assembly}
+    .map { id,r1,r2,lr,f5,gs,locustag,genus,species,strain,assembly -> 
     tuple(id,r1,r2)
     }
     .filter{ id,r1,r2 -> 
@@ -127,7 +129,7 @@ if(!params.input){
     .into {ch_for_short_trim; ch_for_fastqc}
     //Dump long read info to different channel! 
     ch_all_data
-    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly -> 
             tuple(id, file(lr))
     }
     .dump(tag: 'longinput')
@@ -135,7 +137,7 @@ if(!params.input){
 
     //Dump fast5 to separate channel
     ch_all_data_for_fast5
-    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly -> 
             tuple(id, f5)
     }
     .filter {id, fast5 -> 
@@ -145,7 +147,7 @@ if(!params.input){
 
     //Dump genomeSize to separate channel, too
     ch_all_data_for_genomesize
-    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain -> 
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly -> 
     tuple(id,genomeSize)
     }
     .filter{id, genomeSize -> 
@@ -155,7 +157,7 @@ if(!params.input){
  
    //Dump prokka params in to prokka 
     ch_all_data_for_prokka
-    .map {id,r1, r2, lr, f5, genomeSize, locustag,genus,species,strain ->
+    .map {id,r1, r2, lr, f5, genomeSize, locustag,genus,species,strain,assembly ->
      tuple(id, locustag,genus,species,strain)
    }.filter{id, locustag,genus,species,strain ->
       locustag != 'NA'
@@ -163,7 +165,28 @@ if(!params.input){
       species != 'NA'
       strain != 'NA'
     }.set{ch_params_forProkka}
+    
+   //Dump fasta to separate channel
+   // ch_all_data_for_assembly
+   //.map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly -> 
+   //         tuple(id, assembly)
+   // }
+   //.filter {id, fasta -> 
+   //     fasta != 'NA'
+   // }
+   // .into {quast_ch_ass; prokka_ch_ass; centrifuge_ch_ass}
+  // if (params.skip_assembly) {
+    ch_all_data_for_assembly
+    .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly ->
+            tuple(id, assembly)
+    }
+    .filter {id, fasta ->
+        fasta != 'NA'
+    }
+    .into {quast_ch; prokka_ch; centrifuge_ch}
+  // }
 }
+
 
 // Header log info
 log.info nfcoreHeader()
@@ -240,6 +263,8 @@ process trim_and_combine {
     tag "$sample_id"
     publishDir "${params.outdir}/${sample_id}/trimming/shortreads/", mode: 'copy'
 
+    when: !params.skip_assembly
+
     input:
     set sample_id, file(r1), file(r2) from ch_for_short_trim
 
@@ -290,6 +315,8 @@ process fastqc {
     label 'small'
     tag "$sample_id"
     publishDir "${params.outdir}/${sample_id}/FastQC", mode: 'copy'
+
+    when: !params.skip_assembly
 
     input:
     set sample_id, file(fq1), file(fq2) from ch_short_for_fastqc
@@ -390,13 +417,14 @@ process unicycler {
     tag "$sample_id"
     publishDir "${params.outdir}/${sample_id}/unicycler", mode: 'copy'
 
-    when: params.assembler == 'unicycler'
+    when: params.assembler == 'unicycler' && !params.skip_assembly
 
     input:
     set sample_id, file(fq1), file(fq2), file(lrfastq) from ch_short_long_joint_unicycler 
 
     output:
-    set sample_id, file("${sample_id}_assembly.fasta") into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
+    set sample_id, file("${sample_id}_assembly.fasta") into dfast_ch
+    //into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
     set sample_id, file("${sample_id}_assembly.gfa") into bandage_ch
     file("${sample_id}_assembly.fasta") into (ch_assembly_nanopolish_unicycler,ch_assembly_medaka_unicycler)
     file("${sample_id}_assembly.gfa")
@@ -573,7 +601,7 @@ process prokka {
    
    input:
    set sample_id, file(fasta), val(locustag), val(genus), val(species), val(strain) from prokka_ch.join(ch_params_forProkka)
-
+   
    output:
    file("${sample_id}_annotation/")into prokka_logs_ch   
    // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
@@ -733,7 +761,7 @@ process multiqc {
     file prokka_logs from prokka_logs_ch.collect().ifEmpty([])
     file quast_logs from quast_logs_ch.collect()
     // NOTE unicycler and kraken not supported
-    file ('fastqc/*') from ch_fastqc_results.collect()
+    file ('fastqc/*') from ch_fastqc_results.collect().ifEmpty([])
     //file 'software_versions_mqc.yaml' from software_versions_yaml.collect()
     file workflow_summary from create_workflow_summary(summary)
 
