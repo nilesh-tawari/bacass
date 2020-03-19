@@ -603,11 +603,11 @@ process prokka {
    set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
 
    output:
-   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch)
+   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prokka_logs_ch)
    // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
    // also, this only makes sense if we could set genus/species/strain. otherwise all samples
    // are the same
-   file("${sample_id}_annotation/*txt") into prokka_logs_ch
+   //file("${sample_id}_annotation/") into prokka_logs_ch
 
    when: !params.skip_annotation && params.annotation_tool == 'prokka'
 
