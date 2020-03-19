@@ -175,7 +175,7 @@ if(!params.input){
    //     fasta != 'NA'
    // }
    // .into {quast_ch_ass; prokka_ch_ass; centrifuge_ch_ass}
-  // if (params.skip_assembly) {
+   //if (params.skip_assembly) {
     ch_all_data_for_assembly
     .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly ->
             tuple(id, assembly)
@@ -183,8 +183,8 @@ if(!params.input){
     .filter {id, fasta ->
         fasta != 'NA'
     }
-    .into {quast_ch; prokka_ch; centrifuge_ch}
-  // }
+    .into {quast_ch_ass; prokka_ch_ass; centrifuge_ch_ass}
+   //}
 }
 
 
@@ -423,8 +423,7 @@ process unicycler {
     set sample_id, file(fq1), file(fq2), file(lrfastq) from ch_short_long_joint_unicycler 
 
     output:
-    set sample_id, file("${sample_id}_assembly.fasta") into dfast_ch
-    //into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
+    set sample_id, file("${sample_id}_assembly.fasta") into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
     set sample_id, file("${sample_id}_assembly.gfa") into bandage_ch
     file("${sample_id}_assembly.fasta") into (ch_assembly_nanopolish_unicycler,ch_assembly_medaka_unicycler)
     file("${sample_id}_assembly.gfa")
@@ -575,7 +574,7 @@ process quast {
   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
   
   input:
-  set sample_id, file(fasta) from quast_ch
+    set sample_id, file(fasta) from quast_ch_ass.mix(quast_ch)
   
   output:
   // multiqc only detects a file called report.tsv. to avoid
@@ -595,19 +594,20 @@ process quast {
  * Annotation with prokka
  */
 process prokka {
-   label 'small'
+   label 'medium'
    tag "$sample_id"
    publishDir "${params.outdir}/${sample_id}/", mode: 'copy'
    
    input:
-   set sample_id, file(fasta), val(locustag), val(genus), val(species), val(strain) from prokka_ch.join(ch_params_forProkka)
-   
+   set sample_id, file(fasta) from prokka_ch.mix(prokka_ch_ass)
+   set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
+
    output:
-   file("${sample_id}_annotation/")into prokka_logs_ch   
+   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch)
    // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
    // also, this only makes sense if we could set genus/species/strain. otherwise all samples
    // are the same
-   // file("${sample_id}_annotation/*txt") into prokka_logs_ch
+   file("${sample_id}_annotation/*txt") into prokka_logs_ch
 
    when: !params.skip_annotation && params.annotation_tool == 'prokka'
 
@@ -620,10 +620,10 @@ process prokka {
 process centrifuge {
    label 'medium'
    tag "$sample_id"
-   publishDir "${params.outdir}/${sample_id}/centrifuge", mode: 'copy'
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_centrifuge", mode: 'copy'
 
    input:
-   set sample_id, file(fasta) from centrifuge_ch
+   set sample_id, file(fasta) from centrifuge_ch.mix(centrifuge_ch_ass)
 
    output:
    file("${sample_id}_centrifuge_read_report.tsv")
@@ -634,6 +634,72 @@ process centrifuge {
    ~/bin/centrifuge -f -x ${params.centrifugedb} -U ${fasta} -S ${sample_id}_centrifuge_read_report.tsv --report-file ${sample_id}_centrifuge_report.tsv
    """
 }
+
+process abricate {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_abricate", mode: 'copy'
+
+   input:
+   set sample_id, file(prokka_files) from abricate_ch
+
+   output:
+   file("${sample_id}.abr.argannot.out")
+   file("${sample_id}.abr.ncbi.out")
+   file("${sample_id}.abr.plasmidfinder.out")
+   file("${sample_id}.abr.resfinder.out")
+   file("${sample_id}.abr.vfdb.out")
+   file("${sample_id}.abr.summ.txt")
+   file("${sample_id}_abricate.xlsx")
+
+   script:
+   """
+   abricate --minid 60 -db argannot ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.argannot.out
+   abricate --minid 60 -db ncbi ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.ncbi.out
+   abricate --minid 60 -db plasmidfinder ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.plasmidfinder.out
+   abricate --minid 60 -db resfinder ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.resfinder.out
+   abricate --minid 60 -db vfdb ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.vfdb.out 
+   abricate --summary ${sample_id}.abr.*.out > ${sample_id}.abr.summ.txt 
+   perl /lrlhps/users/c274411/17_bacterial_anno/bin/txt2xlsx.pl \"${sample_id}.abr.*.*\" ${sample_id}_abricate.xlsx 
+   """
+}
+
+process antismash {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
+
+   input:
+   set sample_id, file(prokka_files) from antismash_ch
+
+   output:
+   file("${sample_id}_antismash")
+
+   script:
+   """
+   antismash --taxon bacteria --fullhmmer --clusterhmmer --asf --pfam2go --genefinding-tool none --output-dir ${sample_id}_antismash ${sample_id}_annotation/${sample_id}.gbk
+   """
+}
+
+
+process bagel4 {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
+
+   input:
+   set sample_id, file(prokka_files) from bagel4_ch
+
+   output:
+   file("${sample_id}_bagel4")
+
+   script:
+   """
+   cp -r /lrlhps/users/c240616/temp/bagel4/* .
+   perl bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
+   """
+}
+
 process dfast {
    tag "$sample_id"
    publishDir "${params.outdir}/${sample_id}/", mode: 'copy'
@@ -755,6 +821,7 @@ process get_software_versions {
 process multiqc {
     label 'small'
     publishDir "${params.outdir}/MultiQC", mode: 'copy'
+    errorStrategy 'ignore'
 
     input:
     file multiqc_config from ch_multiqc_config.collect().ifEmpty([])
