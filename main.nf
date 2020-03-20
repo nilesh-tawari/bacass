@@ -164,7 +164,7 @@ if(!params.input){
       genus != 'NA'
       species != 'NA'
       strain != 'NA'
-    }.set{ch_params_forProkka}
+    }.into{ch_params_forProkka; ch_params_forRename_contig}
     
    //Dump fasta to separate channel
    // ch_all_data_for_assembly
@@ -183,7 +183,7 @@ if(!params.input){
     .filter {id, fasta ->
         fasta != 'NA'
     }
-    .into {quast_ch_ass; prokka_ch_ass; centrifuge_ch_ass}
+    .set {rename_contig_ch}
    //}
 }
 
@@ -566,6 +566,26 @@ process kraken2_long {
 		--report ${sample_id}_kraken2.report ${lr} | gzip > kraken2.out.gz
 	"""
 }
+/* rename contigs in assembly
+ */
+process rename_contig {
+  label 'small'
+  tag {"$sample_id"}
+  publishDir "${params.outdir}/${sample_id}", mode: 'copy'
+
+  input:
+  set sample_id, file(fasta) from rename_contig_ch
+  set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forRename_contig
+
+  output:
+  set sample_id, file("${sample_id}_${fasta}") into (quast_ch_ass, prokka_ch_ass, centrifuge_ch_ass)
+
+  script:
+  """
+  python /home/c274411/.nextflow/assets/nf-core/bacass/bin/rename_contig.py -i ${fasta} -p "${locustag}" -s "${sample_id}"
+  """
+}
+
 
 /* assembly qc with quast
  */
