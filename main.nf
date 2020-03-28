@@ -180,8 +180,8 @@ if(!params.input){
     .map { id, r1, r2, lr, f5, genomeSize,locustag,genus,species,strain,assembly ->
             tuple(id, assembly)
     }
-    .filter {id, fasta ->
-        fasta != 'NA'
+    .filter {id, assembly ->
+        assembly != 'NA'
     }
     .set {rename_contig_ch}
    //}
@@ -416,14 +416,14 @@ if(params.assembly_type == 'hybrid'){
 process unicycler {
     tag "$sample_id"
     publishDir "${params.outdir}/${sample_id}/unicycler", mode: 'copy'
-
+    errorStrategy 'ignore'
     when: params.assembler == 'unicycler' && !params.skip_assembly
-
+    
     input:
     set sample_id, file(fq1), file(fq2), file(lrfastq) from ch_short_long_joint_unicycler 
 
     output:
-    set sample_id, file("${sample_id}_assembly.fasta") into (quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
+    set sample_id, file("${sample_id}_assembly.fasta") into (rename_uni_contig_ch) //quast_ch, prokka_ch, dfast_ch, centrifuge_ch)
     set sample_id, file("${sample_id}_assembly.gfa") into bandage_ch
     file("${sample_id}_assembly.fasta") into (ch_assembly_nanopolish_unicycler,ch_assembly_medaka_unicycler)
     file("${sample_id}_assembly.gfa")
@@ -574,15 +574,16 @@ process rename_contig {
   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
 
   input:
-  set sample_id, file(fasta) from rename_contig_ch
-  set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forRename_contig
+  set sample_id, file(fasta), val(locustag), val(genus), val(species), val(strain) from rename_contig_ch.mix(rename_uni_contig_ch).join(ch_params_forRename_contig)
+  //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forRename_contig
 
   output:
-  set sample_id, file("${sample_id}_${fasta}") into (quast_ch_ass, prokka_ch_ass, centrifuge_ch_ass)
+  set sample_id, file("*_renamed*") into (quast_ch, dfast_ch, prokka_ch, centrifuge_ch)
 
   script:
+  //def filter = params.skip_assembly ? "${sample_id}" : 'a'
   """
-  python /home/c274411/.nextflow/assets/nf-core/bacass/bin/rename_contig.py -i ${fasta} -p "${locustag}" -s "${sample_id}"
+  python /home/c274411/.nextflow/assets/nf-core/bacass/bin/rename_contig.py -i ${fasta} -p "${locustag}" 
   """
 }
 
@@ -594,7 +595,7 @@ process quast {
   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
   
   input:
-    set sample_id, file(fasta) from quast_ch_ass.mix(quast_ch)
+    set sample_id, file(fasta) from quast_ch //quast_ch_ass.mix(quast_ch)
   
   output:
   // multiqc only detects a file called report.tsv. to avoid
@@ -618,9 +619,9 @@ process prokka {
    tag "$sample_id"
    publishDir "${params.outdir}/${sample_id}/", mode: 'copy'
    
-   input:
-   set sample_id, file(fasta) from prokka_ch.mix(prokka_ch_ass)
-   set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
+    input:
+   set sample_id, file(fasta), val(locustag), val(genus), val(species), val(strain) from prokka_ch.join(ch_params_forProkka)
+   //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
 
    output:
    set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prokka_logs_ch)
@@ -643,11 +644,12 @@ process centrifuge {
    publishDir "${params.outdir}/${sample_id}/${sample_id}_centrifuge", mode: 'copy'
 
    input:
-   set sample_id, file(fasta) from centrifuge_ch.mix(centrifuge_ch_ass)
+   set sample_id, file(fasta) from centrifuge_ch // .mix(centrifuge_ch_ass)
 
    output:
    file("${sample_id}_centrifuge_read_report.tsv")
    file("${sample_id}_centrifuge_report.tsv")
+  when: !params.skip_centrifuge
 
    script:
    """
@@ -672,6 +674,7 @@ process abricate {
    file("${sample_id}.abr.summ.txt")
    file("${sample_id}_abricate.xlsx")
 
+   when: !params.skip_abricate
    script:
    """
    abricate --minid 60 -db argannot ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.argannot.out
@@ -694,6 +697,7 @@ process antismash {
 
    output:
    file("${sample_id}_antismash")
+   when: !params.skip_antismash
 
    script:
    """
@@ -712,6 +716,7 @@ process bagel4 {
 
    output:
    file("${sample_id}_bagel4")
+   when: !params.skip_bagel4
 
    script:
    """
