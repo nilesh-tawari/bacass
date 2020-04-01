@@ -45,11 +45,19 @@ out_file = os.path.join(out_dir, filename_out)
 
 ###############################################################################
 
+# first determine number of contigs for renaming e.g. 001
+nc = 0
+with open(inp_file, 'r') as fasta:
+    for line in fasta:
+        if line.startswith('>'):
+            nc = nc + 1
+nc = len(str(nc))
+
 i = 1
 with open(out_file, 'w') as out_fasta:
     with open(inp_file, 'r') as fasta:
         for line in fasta:
             if line.startswith('>'):
-                line = '>{0}_C{1:02d} {2}'.format(prefix, i, line[1:])
+                line = '>{0}_C{1} {2}'.format(prefix, str(i).zfill(nc), line[1:])
                 i = i + 1
             out_fasta.writelines(line)
