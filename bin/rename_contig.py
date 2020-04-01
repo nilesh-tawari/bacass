@@ -38,7 +38,7 @@ def path_leaf(path):
 out_dir, filename_in = path_leaf(inp_file)
 file_prefix = os.path.splitext(filename_in)[0]
 file_suffix = os.path.splitext(filename_in)[1]
-filename_out = file_prefix + "_renamed" + file_suffix
+filename_out = file_prefix + ".renamedc" + file_suffix
 out_file = os.path.join(out_dir, filename_out)
 #if strain != 'a':
 #   out_file = os.path.join(out_dir, strain + '_renamed_' + filename_in)

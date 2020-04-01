@@ -578,7 +578,7 @@ process rename_contig {
   //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forRename_contig
 
   output:
-  set sample_id, file("*_renamed*") into (quast_ch, dfast_ch, prokka_ch, centrifuge_ch)
+  set sample_id, file("*renamedc*") into (quast_ch, dfast_ch, prokka_ch, centrifuge_ch)
 
   script:
   //def filter = params.skip_assembly ? "${sample_id}" : 'a'
