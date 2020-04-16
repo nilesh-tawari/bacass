@@ -720,8 +720,9 @@ process bagel4 {
 
    script:
    """
-   cp -r /lrlhps/users/c240616/temp/bagel4/* .
+   ln -s /lrlhps/users/c274411/17_bacterial_anno/bin/bagel4_2020/* .
    perl bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
+   python /home/c274411/.nextflow/assets/nf-core/bacass/bin/generate_local_reports.py -r ${sample_id}_bagel4 
    """
 }
 

@@ -1,0 +1,107 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<!-- https://www.kryogenix.org/code/browser/sorttable/ -->
+<head>
+	<title>Bagel4 Overview Table</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+	<script src="https://d3js.org/d3.v4.min.js"></script>
+	<script src="http://bagel4.molgenrug.nl/php/js/sorttable.js"></script>
+	<style>
+		table.sortable {
+			  background-color: #EEEEEE;
+			  width: auto;
+			  border-collapse: collapse;
+				font-family: Calibri;
+			}
+			table.sortable th {
+				padding-left: 3px;
+				padding-right: 15px;
+				padding-top: 1px;
+				font-weight: normal;
+				font-size: 16px;
+				background: #1C6EA4;
+				color: white;
+				border-bottom: 2px solid #12496d;
+				border-top: 1px solid #12496d;
+				cursor:pointer;
+			}
+			table.sortable td {
+				padding-left: 5px;
+				padding-right: 25px;
+				padding-top: 2px;
+				padding-bottom: 1px;
+				font-size: 14px;
+				color: #01375b;
+				background-color:#dce8ef;
+			}
+			table.test_sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after {
+				content: " \25B4\25BE"
+			}
+	</style>
+</head>
+
+<body>
+<div id="graphic">SVG of Result</div>
+<div id="DivSummaryTable">No Summary Table found</div>
+<br>
+Click on table header to sort table
+<div id="DivOverviewTable"></div>
+<br>
+<script>
+
+	function getUrlVars() {
+		var vars = [], hash;
+		var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+		for(var i = 0; i < hashes.length; i++)  {
+			hash = hashes[i].split('=');
+			hash[1] = unescape(hash[1]);
+			vars.push(hash[0]);
+			vars[hash[0]] = hash[1];
+		}
+		return vars;
+	}
+	var UrlVars = getUrlVars();
+
+
+	//OverviewTableFile = "00.OverviewGeneTables.json" ;
+	show_OverviewTable() ;
+	var SortableTable = document.getElementById("OverviewTable") ;
+	sorttable.makeSortable(SortableTable);
+
+	function show_OverviewTable() {
+
+			// # 1. The summary table
+			// from 00.OverviewGeneTables.json file
+			var data = $OverviewGeneTables;
+			//var data = JSON.parse(text);
+			var TableBody = '<table id=SummaryTable class=sortable><thead>' ;
+			TableBody += '<tr><th>Run Summary</th><th></th></tr></thead>' ;
+			TableBody += '<tbody>' ;
+			TableBody += '<tr><td>Number of files analyzed</td><td>'+data.SummaryTable.filecount + '</td></tr>' ;
+			TableBody += '<tr><td>Number of DNA fragments analyzed</td><td>'+data.SummaryTable.querycount + '</td></tr>' ;
+			TableBody += '<tr><td>Total bases in all DNA</td><td>'+data.SummaryTable.basecount + '</td></tr>' ;
+			TableBody += "<tr><td>Number of Areas Of Interest (AOI's)</td><td>"+data.SummaryTable.AOIcount + '</td></tr>' ;
+			TableBody +=  '</tbody></table>' ;
+			document.getElementById("DivSummaryTable").innerHTML = TableBody ;
+			// # 2. The results table
+			var TableBody = '<table id=OverviewTable class=sortable><thead>' ;
+			TableBody += '<tr><th>AOI</th><th>Start</th><th>End</th><th>Class</th><th>Filename</th></tr></thead><tbody>' ;
+			for (var i = 0, len = data.ResultsTable.length; i < len; i++) {
+				TableBody += '<tr><td>'+data.ResultsTable[i].AOI + '</td>' ;
+				TableBody += '    <td>'+data.ResultsTable[i].start + '</td>' ;
+				TableBody += '    <td>'+data.ResultsTable[i].end + '</td>' ;
+				TableBody += '    <td>'+data.ResultsTable[i].class + '</td>' ;
+				TableBody += '    <td>'+data.ResultsTable[i].filename + '</td>' ;
+				TableBody += '</tr>' ;
+			}
+			TableBody +=  '</tbody></table>' ;
+			document.getElementById("DivOverviewTable").innerHTML = TableBody ;
+			sorttable.makeSortable(document.getElementById("OverviewTable"));	// make the table sortable
+		//}) ;
+	}
+
+
+
+</script>
+</body>
+</html>
