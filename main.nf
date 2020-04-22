@@ -578,7 +578,7 @@ process rename_contig {
   //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forRename_contig
 
   output:
-  set sample_id, file("*renamedc*") into (quast_ch, dfast_ch, prokka_ch, centrifuge_ch)
+  set sample_id, file("*renamedc*") into (quast_ch, dfast_ch, prokka_ch, centrifuge_ch, prophet_fa_ch)
 
   script:
   //def filter = params.skip_assembly ? "${sample_id}" : 'a'
@@ -624,7 +624,7 @@ process prokka {
    //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
 
    output:
-   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prokka_logs_ch)
+   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prophet_ch, prokka_logs_ch)
    // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
    // also, this only makes sense if we could set genus/species/strain. otherwise all samples
    // are the same
@@ -723,6 +723,24 @@ process bagel4 {
    ln -s /lrlhps/users/c274411/17_bacterial_anno/bin/bagel4_2020/* .
    perl bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
    python /home/c274411/.nextflow/assets/nf-core/bacass/bin/generate_local_reports.py -r ${sample_id}_bagel4 
+   """
+}
+
+process prophet {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}", mode: 'copy'
+
+   input:
+   set sample_id, file(fasta), file(prokka_files) from prophet_fa_ch.join(prophet_ch)
+
+   output:
+   file("${sample_id}_prophet")
+   when: !params.skip_prophet
+
+   script:
+   """
+   /lrlhps/users/c274411/17_bacterial_anno/bin/ProphET/ProphET_standalone.pl --fasta  ${fasta} --gff_in ${sample_id}_annotation/${sample_id}.gff --outdir ${sample_id}_prophet
    """
 }
 
