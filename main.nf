@@ -741,6 +741,7 @@ process prophet {
    script:
    """
    /lrlhps/users/c274411/17_bacterial_anno/bin/ProphET/ProphET_standalone.pl --fasta  ${fasta} --gff_in ${sample_id}_annotation/${sample_id}.gff --outdir ${sample_id}_prophet
+   cut -f1,3,4 ${sample_id}_prophet/phages_coords > ${sample_id}_prophet/phages_coords.bed
    """
 }
 
