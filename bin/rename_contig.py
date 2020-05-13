@@ -18,13 +18,11 @@ USAGE: python -i BVEN_C01.0.AOI_01.faa -p BSUB -s 105
 # Parameters
 parser = argparse.ArgumentParser(description = 'Rename contigs in fasta file')
 parser.add_argument('-i', '--inp_file', help='Input file')
-parser.add_argument('-p', '--prefix', help='prefix for contigs e.g. BSUB')
-parser.add_argument('-s', '--strain', required=False, help='strain for file name e.g. 64') 
+parser.add_argument('-p', '--prefix', help='prefix for contigs, created from genus, species, year and sample id (GSPEYYXXX) e.g. BSUB2064')
 
 args = parser.parse_args()
 inp_file = os.path.abspath(args.inp_file)
 prefix = args.prefix
-strain = args.strain
 
 ###############################################################################
 def path_leaf(path):
@@ -40,8 +38,6 @@ file_prefix = os.path.splitext(filename_in)[0]
 file_suffix = os.path.splitext(filename_in)[1]
 filename_out = file_prefix + ".renamedc" + file_suffix
 out_file = os.path.join(out_dir, filename_out)
-#if strain != 'a':
-#   out_file = os.path.join(out_dir, strain + '_renamed_' + filename_in)
 
 ###############################################################################
 
@@ -61,3 +57,4 @@ with open(out_file, 'w') as out_fasta:
                 line = '>{0}_C{1} {2}'.format(prefix, str(i).zfill(nc), line[1:])
                 i = i + 1
             out_fasta.writelines(line)
+print('Renamed contigs in the output file {0}'.format(out_file))
