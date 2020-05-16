@@ -672,7 +672,7 @@ process abricate {
    file("${sample_id}.abr.resfinder.out")
    file("${sample_id}.abr.vfdb.out")
    file("${sample_id}.abr.summ.txt")
-   file("${sample_id}_abricate.xlsx")
+   file("${sample_id}.ABRicate.report.xlsx")
 
    when: !params.skip_abricate
    script:
@@ -683,7 +683,7 @@ process abricate {
    abricate --minid 60 -db resfinder ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.resfinder.out
    abricate --minid 60 -db vfdb ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.vfdb.out 
    abricate --summary ${sample_id}.abr.*.out > ${sample_id}.abr.summ.txt 
-   perl /lrlhps/users/c274411/17_bacterial_anno/bin/txt2xlsx.pl \"${sample_id}.abr.*.*\" ${sample_id}_abricate.xlsx 
+   /home/c274411/.nextflow/assets/nf-core/bacass/bin/summarize_abricate.py -d . -g ${sample_id}_annotation/${sample_id}.gbk -o . -p ${sample_id}
    """
 }
 
