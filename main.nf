@@ -583,7 +583,7 @@ process rename_contig {
   script:
   //def filter = params.skip_assembly ? "${sample_id}" : 'a'
   """
-  python /home/c274411/.nextflow/assets/nf-core/bacass/bin/rename_contig.py -i ${fasta} -p "${locustag}" 
+  python ${baseDir}/bin/rename_contig.py -i ${fasta} -p "${locustag}" 
   """
 }
 
@@ -683,7 +683,7 @@ process abricate {
    abricate --minid 60 -db resfinder ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.resfinder.out
    abricate --minid 60 -db vfdb ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.abr.vfdb.out 
    abricate --summary ${sample_id}.abr.*.out > ${sample_id}.abr.summ.txt 
-   /home/c274411/.nextflow/assets/nf-core/bacass/bin/summarize_abricate.py -d . -g ${sample_id}_annotation/${sample_id}.gbk -o . -p ${sample_id}
+   ${baseDir}/bin/summarize_abricate.py -d . -g ${sample_id}_annotation/${sample_id}.gbk -o . -p ${sample_id}
    """
 }
 
@@ -722,7 +722,7 @@ process bagel4 {
    """
    ln -s /lrlhps/users/c274411/17_bacterial_anno/bin/bagel4_2020/* .
    perl bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
-   python /home/c274411/.nextflow/assets/nf-core/bacass/bin/generate_local_reports.py -r ${sample_id}_bagel4 
+   python ${baseDir}/bin/generate_local_reports.py -r ${sample_id}_bagel4 
    """
 }
 
