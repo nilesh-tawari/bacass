@@ -12,7 +12,9 @@ regexes = {
     'Kraken2': ['v_kraken2.txt', r"([\d\.]+)-beta"],
     'Quast': ['v_quast.txt', r"QUAST v(\S+)"],
     'Prokka': ['v_prokka.txt', r"prokka (\S+)"],
-    'Bandage': ['v_bandage.txt', r"Version: (\S+)"],
+    'Bandage': ['v_bandage.txt', r"Version: (\S+)"]}
+'''
+,
     'Nanopolish': ['v_nanopolish.txt', r"nanopolish version (\S+)"],
     'Miniasm': ['v_miniasm.txt', r"(\S+)"],
     'Racon': ['v_racon.txt', r"v(\S+)"],
@@ -21,7 +23,7 @@ regexes = {
     'Minimap2': ['v_minimap2.txt', r"(\S+)"],
     'NanoPlot': ['v_nanoplot.txt', r"NanoPlot (\S+)"],
 }
-
+'''
 results = OrderedDict()
 results['nf-core/bacass'] = '<span style="color:#999999;\">N/A</span>'
 results['Nextflow'] = '<span style="color:#999999;\">N/A</span>'
@@ -32,15 +34,15 @@ results['Kraken2'] = '<span style="color:#999999;\">N/A</span>'
 results['Quast'] = '<span style="color:#999999;\">N/A</span>'
 results['Prokka'] = '<span style="color:#999999;\">N/A</span>'
 results['Bandage'] = '<span style="color:#999999;\">N/A</span>'
-results['Porechop'] = '<span style="color:#999999;\">N/A</span>'
-results['Nanopolish'] = '<span style="color:#999999;\">N/A</span>'
-results['Miniasm'] = '<span style="color:#999999;\">N/A</span>'
-results['Racon'] = '<span style="color:#999999;\">N/A</span>'
-results['Canu'] = '<span style="color:#999999;\">N/A</span>'
-results['DFAST'] = '<span style="color:#999999;\">N/A</span>'
-results['Samtools'] = '<span style="color:#999999;\">N/A</span>'
-results['Minimap2'] = '<span style="color:#999999;\">N/A</span>'
-results['NanoPlot'] = '<span style="color:#999999;\">N/A</span>'
+#results['Porechop'] = '<span style="color:#999999;\">N/A</span>'
+#results['Nanopolish'] = '<span style="color:#999999;\">N/A</span>'
+#results['Miniasm'] = '<span style="color:#999999;\">N/A</span>'
+#results['Racon'] = '<span style="color:#999999;\">N/A</span>'
+#results['Canu'] = '<span style="color:#999999;\">N/A</span>'
+#results['DFAST'] = '<span style="color:#999999;\">N/A</span>'
+#results['Samtools'] = '<span style="color:#999999;\">N/A</span>'
+#results['Minimap2'] = '<span style="color:#999999;\">N/A</span>'
+#results['NanoPlot'] = '<span style="color:#999999;\">N/A</span>'
 
 
 # Search each file using its regex

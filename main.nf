@@ -606,8 +606,8 @@ process quast {
 
   script:
   """
-  ~/bin/quast.py -t ${task.cpus} -o ${sample_id}_assembly_QC ${fasta}
-  ~/bin/quast.py -v > v_quast.txt
+  quast.py -t ${task.cpus} -o ${sample_id}_assembly_QC ${fasta}
+  quast.py -v > v_quast.txt
   """
 }
 
@@ -720,8 +720,7 @@ process bagel4 {
 
    script:
    """
-   ln -s /lrlhps/users/c274411/17_bacterial_anno/bin/bagel4_2020/* .
-   perl bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
+   bagel4_wrapper.pl -s ${sample_id}_bagel4 -query ${sample_id}_annotation -r *.fna
    python ${baseDir}/bin/generate_local_reports.py -r ${sample_id}_bagel4 
    """
 }
@@ -740,7 +739,7 @@ process prophet {
 
    script:
    """
-   /lrlhps/users/c274411/17_bacterial_anno/bin/ProphET/ProphET_standalone.pl --fasta  ${fasta} --gff_in ${sample_id}_annotation/${sample_id}.gff --outdir ${sample_id}_prophet
+   ProphET_standalone.pl --fasta  ${fasta} --gff_in ${sample_id}_annotation/${sample_id}.gff --outdir ${sample_id}_prophet
    cut -f1,3,4 ${sample_id}_prophet/phages_coords > ${sample_id}_prophet/phages_coords.bed
    """
 }
@@ -848,13 +847,13 @@ process get_software_versions {
     skewer -v > v_skewer.txt
     kraken2 -v > v_kraken2.txt
     Bandage -v > v_bandage.txt
-    nanopolish --version > v_nanopolish.txt
-    miniasm -V > v_miniasm.txt
-    racon --version > v_racon.txt
-    samtools --version &> v_samtools.txt 2>&1 || true
-    minimap2 --version &> v_minimap2.txt
-    NanoPlot --version > v_nanoplot.txt
-    canu --version > v_canu.txt
+    #nanopolish --version > v_nanopolish.txt
+    #miniasm -V > v_miniasm.txt
+    #racon --version > v_racon.txt
+    #samtools --version &> v_samtools.txt 2>&1 || true
+    #minimap2 --version &> v_minimap2.txt
+    #NanoPlot --version > v_nanoplot.txt
+    #canu --version > v_canu.txt
     scrape_software_versions.py > software_versions_mqc.yaml
     """
 }
@@ -880,7 +879,7 @@ process multiqc {
     output:
     file "*multiqc_report.html" into multiqc_report
     file "*_data"
-    file "multiqc_plots"
+    file "*_plots"
     
     script:
     rtitle = custom_runName ? "--title \"$custom_runName\"" : ''
