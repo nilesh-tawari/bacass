@@ -634,7 +634,8 @@ process prokka {
 
    script:
    """
-   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} --locustag "${locustag}" --genus "${genus}" --species "${species}" --strain "${strain}" ${fasta}
+   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} --locustag "${locustag}" --genus "${genus}" --species "${species}" --strain "${strain}" ${fasta} --compliant
+   ${baseDir}/bin/gbk2selector.py -i ${sample_id}_annotation/${sample_id}.gbk
    """
 }
 
@@ -653,7 +654,7 @@ process centrifuge {
 
    script:
    """
-   ~/bin/centrifuge -f -x ${params.centrifugedb} -U ${fasta} -S ${sample_id}_centrifuge_read_report.tsv --report-file ${sample_id}_centrifuge_report.tsv
+   centrifuge -f -x ${params.centrifugedb} -U ${fasta} -S ${sample_id}_centrifuge_read_report.tsv --report-file ${sample_id}_centrifuge_report.tsv
    """
 }
 
