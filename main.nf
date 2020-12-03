@@ -538,7 +538,7 @@ process kraken2 {
 	"""
     # stdout reports per read which is not needed. kraken.report can be used with pavian
     # braken would be nice but requires readlength and correspondingly build db
-	kraken2 --threads ${task.cpus} --paired --db ${kraken2db} \
+	kraken2 --threads ${task.cpus} --use-names --paired --db ${kraken2db} \
 		--report ${sample_id}_kraken2.report ${fq1} ${fq2} | gzip > kraken2.out.gz
 	"""
 }
@@ -634,7 +634,7 @@ process prokka {
 
    script:
    """
-   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} --locustag "${locustag}" --genus "${genus}" --species "${species}" --strain "${strain}" ${fasta} --compliant
+   prokka --cpus ${task.cpus} --prefix "${sample_id}" --outdir ${sample_id}_annotation ${params.prokka_args} --locustag "${locustag}" --genus "${genus}" --species "${species}" --strain "${strain}" ${fasta} --compliant --centre Elanco
    python ${baseDir}/bin/gbk2selector.py -i ${sample_id}_annotation/${sample_id}.gbk
    """
 }

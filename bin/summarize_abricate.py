@@ -72,7 +72,7 @@ for file in files:
             # now do something with the record
             #print("Name %s, %i features" % (gb_record.name, len(gb_record.features)))
             for i in range(len(df)):
-                if gb_record.name == df.iloc[i].SEQUENCE:
+                if gb_record.name == df.iloc[i].SEQUENCE.split('|')[-1].strip():
                     start, end = [df.iloc[i].START, df.iloc[i].END]
                     desired = set(xrange(int(start),int(end),1))
                     for f in gb_record.features:
