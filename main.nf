@@ -164,7 +164,7 @@ if(!params.input){
       genus != 'NA'
       species != 'NA'
       strain != 'NA'
-    }.into{ch_params_forProkka; ch_params_forRename_contig}
+    }.into{ch_params_forProkka; ch_params_forRename_contig; ch_params_forInfernal; ch_params_forRock; ch_params_fortransterm}
     
    //Dump fasta to separate channel
    // ch_all_data_for_assembly
@@ -624,7 +624,7 @@ process prokka {
    //set sample_id, val(locustag), val(genus), val(species), val(strain) from ch_params_forProkka
 
    output:
-   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prophet_ch, prokka_logs_ch)
+   set sample_id, file("${sample_id}_annotation/")into (abricate_ch, antismash_ch, bagel4_ch, prophet_ch, prokka_logs_ch, gbk2tab_ch, add_EC_ch, add_ISEscan_ch, infernal_ch, rock_ch, CRISPRDetect_ch, PhiSpy_ch, transterm_ch)
    // multiqc `prokka module is just a stub using txt. see https://github.com/ewels/MultiQC/issues/587
    // also, this only makes sense if we could set genus/species/strain. otherwise all samples
    // are the same
@@ -742,6 +742,192 @@ process prophet {
    """
    ProphET_standalone.pl --fasta  ${fasta} --gff_in ${sample_id}_annotation/${sample_id}.gff --outdir ${sample_id}_prophet
    cut -f1,3,4 ${sample_id}_prophet/phages_coords > ${sample_id}_prophet/phages_coords.bed
+   """
+}
+
+process gbk2tab {
+   label 'small'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files) from gbk2tab_ch
+   output:
+   set sample_id, file("cds.raw.txt")into (add_EC_cds_ch)
+   file("cds.raw.txt")
+   file("gbk")
+   when: !params.skip_gbk2tab
+   script:
+   """
+   mkdir gbk
+   perl ${baseDir}/bin/gbk2txtNew.pl -f CDS -i ${sample_id}_annotation/${sample_id}.gbk > cds.raw.txt
+   perl ${baseDir}/bin/gbk2txtNew.pl -f tRNA -i ${sample_id}_annotation/${sample_id}.gbk > gbk/trna.tab
+   perl ${baseDir}/bin/gbk2txtNew.pl -f tmRNA -i ${sample_id}_annotation/${sample_id}.gbk > gbk/tmrna.tab
+   perl ${baseDir}/bin/gbk2txtNew.pl -f repeat_regions -i ${sample_id}_annotation/${sample_id}.gbk > gbk/crispr.tab
+   """
+}
+
+process add_EC {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files), file(cds_file) from add_EC_ch.join(add_EC_cds_ch)
+   output:
+   file("PRIAM_${sample_id}")
+   set sample_id, file("cds.raw.ecFixed.txt")into (rbs_finder_ch, rockhopper_ch, transterm_cds_ch)
+   when: !params.skip_add_EC
+   script:
+   """
+   time java -jar /data/reference/PRIAM/PRIAM_search.jar -p /data/reference/PRIAM/PRIAM_JAN18 -np 8 -i ${sample_id}_annotation/${sample_id}.faa -cm T -cg T -n ${sample_id} -o .
+   python ${baseDir}/bin/add_EC.py -e PRIAM_${sample_id}/ANNOTATION/sequenceECs.txt -c cds.raw.txt
+   """
+}
+
+process ISEscan {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files) from add_ISEscan_ch
+   output:
+   file("ISEscan_${sample_id}")
+   file("gbk/mobile_element.tab")
+   when: !params.skip_ISEscan 
+   script:
+   """
+   mkdir ISEscan_${sample_id}
+   cd ISEscan_${sample_id}
+   mkdir gbk
+   isescan.py --nthread 8 ../${sample_id}_annotation/${sample_id}.fna proteome hmm > ${sample_id}.log
+   perl ${baseDir}/bin/parse_ISEscan_v1.pl --file prediction/*_annotation/${sample_id}.fna.gff > mobile_element.tab.txt
+   cut -f1-9 mobile_element.tab.txt > gbk/mobile_element.tab
+   mv gbk ../
+   """
+}
+
+process infernal_rbs {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files), file(cds_file), val(locustag), val(genus), val(species), val(strain) from infernal_ch.join(rbs_finder_ch).join(ch_params_forInfernal)
+   output:
+   file("gbk")
+   file("${sample_id}.cmscan")
+   file("${sample_id}.coord")
+   set sample_id, file("${sample_id}.crd")into (transterm_crd_ch)
+   file("${sample_id}.rbs")
+   file("${sample_id}.rbs.tab.txt")
+   set sample_id, file("regulatory.tab.txt")into (ribo_ch)
+   file("riboswitch.tab.txt")
+
+   when: !params.skip_infernal_rbs
+   script:
+   """
+   mkdir gbk
+   cmscan --rfam --cut_ga --nohmmonly --tblout ${sample_id}.tblout --fmt 2 /data/reference/Rfam/14.3/Rfam.cm ${sample_id}_annotation/${sample_id}.fna > ${sample_id}.cmscan
+   perl ${baseDir}/bin/parse_rnas_v1.pl --file ${sample_id}.cmscan --tag ${locustag}_ncRNA > gbk/ncrna.tab
+   perl ${baseDir}/bin/parse_riboswitch_v1.pl --file ${sample_id}.cmscan --tag ${locustag}_ribo > riboswitch.tab.txt
+   cut -f1-7 riboswitch.tab.txt > gbk/riboswitch.tab
+   perl ${baseDir}/bin/parse_rrna_v1.pl --file ${sample_id}.cmscan --tag ${locustag}_rRNA > gbk/rrna.tab
+   
+   python ${baseDir}/bin/gen_coor.py -i ${sample_id}_annotation/${sample_id}.gff
+   mv ${sample_id}_annotation/${sample_id}.coord .
+   mv ${sample_id}_annotation/${sample_id}.crd .
+   perl ${baseDir}/bin/rbs_finder.pl ${sample_id}_annotation/${sample_id}.fsa ${sample_id}.coord ${sample_id}.rbs 25 >& ${sample_id}.rbs.log
+   
+   perl ${baseDir}/bin/rbs2tab_v1.pl --cdsfile cds.raw.ecFixed.txt --rbsfile ${sample_id}.rbs --tag ${locustag} > ${sample_id}.rbs.tab.txt
+   cat ${sample_id}.rbs.tab.txt > regulatory.tab.txt
+   #sed -i 's/gnl|Elanco|//g' ${sample_id}_annotation/${sample_id}.fsa 
+   #transterm -p /apps/software/TransTermHP/2.09-Linux_x86_64/bin/expterm.dat ${sample_id}_annotation/${sample_id}.fsa ${sample_id}.crd > ${sample_id}.tt
+   #ml purge
+   #ml BioPerl
+   #perl ${baseDir}/bin/tts2tab_new_v1.pl --cdsfile cds.raw.ecFixed.txt --ttsfile ${sample_id}.tt --tag ${locustag} > ${sample_id}.tts.tab.txt
+   #cat ${sample_id}.tts.tab.txt | grep -v "^chromo" >> regulatory.tab.txt
+   #cut -f1-6,8-9 regulatory.tab.txt > gbk/regulatory.tab
+   """
+}
+
+process transterm {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files), file(cds_file), file(crd_file), file(ribo), val(locustag), val(genus), val(species), val(strain) from transterm_ch.join(transterm_cds_ch).join(transterm_crd_ch).join(ribo_ch).join(ch_params_fortransterm)
+   output:
+   file("${sample_id}.tt")
+   when: !params.skip_transterm
+   script:
+   """
+   sed -i 's/gnl|Elanco|//g' ${sample_id}_annotation/${sample_id}.fsa
+   transterm -p /apps/software/TransTermHP/2.09-Linux_x86_64/bin/expterm.dat ${sample_id}_annotation/${sample_id}.fsa ${sample_id}.crd > ${sample_id}.tt
+   #perl ${baseDir}/bin/tts2tab_new_v1.pl --cdsfile cds.raw.ecFixed.txt --ttsfile ${sample_id}.tt --tag ${locustag} > ${sample_id}.tts.tab.txt
+   #cat ${sample_id}.tts.tab.txt | grep -v "^chromo" >> regulatory.tab.txt
+   #cut -f1-6,8-9 regulatory.tab.txt > gbk/regulatory.tab
+   """
+}
+
+process rockhopper {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files), val(locustag), val(genus), val(species), val(strain), file(rock) from rock_ch.join(ch_params_forRock).join(rockhopper_ch)
+   output:
+   file("Rockhopper")
+   file("gbk/operon.tab")
+   when: !params.skip_rockhopper
+   script:
+   """
+   mkdir Rockhopper
+   cd Rockhopper
+   mkdir gbk
+   python ${baseDir}/bin/splitgbk.py < ../${sample_id}_annotation/${sample_id}.gbk
+   for i in '${locustag}'*.gbk; do echo \$i; ${baseDir}/bin/genbank2rnt.pl < \${i} > \${i%gbk}rnt;done
+   for i in "${locustag}"*.gbk; do echo \$i; ${baseDir}/bin/genbank2ptt.pl < \${i} > \${i%gbk}ptt;done
+   for i in *.gbk; do ${baseDir}/bin/gbk2fna.pl \$i > \${i%gbk}fna;done
+   for i in *.gbk; do mkdir \${i%.gbk}; mv \${i%gbk}* \${i%.gbk}/;done
+   for i in "${locustag}"*;do echo \$i;time java -Xmx1200m -cp /home/NILESH_RAMESH.TAWARI/Projects/18_Lreuteri/scripts/Rockhopper.jar Rockhopper -g \$i ${baseDir}/bin/R1.fq%${baseDir}/bin/R2.fq ${baseDir}/bin/R1.fq%${baseDir}/bin/R2.fq -TIME -v 1 -o \${i}_Rockhopper;done
+   # Parse and generate operon table
+   perl ${baseDir}/bin/parse_operon_multi_v1.pl --tag "${locustag}"op > gbk/operon.tab
+   perl ${baseDir}/bin/add_operon2cds_v1.pl --cdsfile ../cds.raw.ecFixed.txt --opfile gbk/operon.tab
+   mv gbk ../
+   """
+}
+
+process CRISPRDetect {
+   label 'medium'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files) from CRISPRDetect_ch
+   output:
+   file("${sample_id}.crispDir")
+   when: !params.skip_CRISPRDetect
+   script:
+   """
+   mkdir ${sample_id}.crispDir
+   CRISPRDetect.pl -g ${sample_id}_annotation/${sample_id}.gbk -o ${sample_id}.crispr >& ${sample_id}.crispr.log
+   mv *crispr* ${sample_id}.crispDir
+   """
+}
+
+process PhiSpy {
+   label 'small'
+   tag "$sample_id"
+   publishDir "${params.outdir}/${sample_id}/${sample_id}_annotation/predictions/", mode: 'copy'
+   input:
+   set sample_id, file(prokka_files) from PhiSpy_ch
+   output:
+   file("${sample_id}_PhiSpy_new")
+   file("gbk/misc_feature.tab")
+   when: !params.skip_PhiSpy
+   script:
+   """
+   mkdir gbk
+   PhiSpy.py -o ${sample_id}_PhiSpy_new ${sample_id}_annotation/${sample_id}.gbk >& ${sample_id}_PhiSpy_new.log
+   python ${baseDir}/bin/phispy_parse.py -i ${sample_id}_PhiSpy_new/prophage.gff3
+   cut -f1-7 ${sample_id}_PhiSpy_new/misc_feature.tab.txt > gbk/misc_feature.tab
    """
 }
 
